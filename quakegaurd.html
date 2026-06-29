@@ -1,0 +1,440 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>QuakeGuard AI - Earthquake Prediction & Monitoring</title>
+    
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+    <style>
+        :root {
+            --bg-color: #f0f2f5;
+            --text-color: #333;
+            --glass-bg: rgba(255, 255, 255, 0.7);
+            --glass-border: rgba(255, 255, 255, 0.4);
+            --glass-shadow: rgba(0, 0, 0, 0.1);
+            --card-text: #222;
+            --accent-color: #007bff;
+        }
+
+        [data-theme="dark"] {
+            --bg-color: #0f172a;
+            --text-color: #f8fafc;
+            --glass-bg: rgba(30, 41, 59, 0.7);
+            --glass-border: rgba(255, 255, 255, 0.1);
+            --glass-shadow: rgba(0, 0, 0, 0.5);
+            --card-text: #e2e8f0;
+            --accent-color: #3b82f6;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            transition: background-color 0.3s, color 0.3s;
+        }
+
+        body {
+            background: var(--bg-color);
+            background-image: radial-gradient(circle at 15% 50%, rgba(59, 130, 246, 0.15), transparent 25%),
+                              radial-gradient(circle at 85% 30%, rgba(139, 92, 246, 0.15), transparent 25%);
+            color: var(--text-color);
+            min-height: 100vh;
+        }
+
+        .disclaimer {
+            background-color: #ef4444;
+            color: white;
+            text-align: center;
+            padding: 10px;
+            font-size: 0.9rem;
+            font-weight: 600;
+            letter-spacing: 0.5px;
+            z-index: 1000;
+            position: relative;
+        }
+
+        nav {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 1rem 2rem;
+            background: var(--glass-bg);
+            backdrop-filter: blur(12px);
+            border-bottom: 1px solid var(--glass-border);
+            position: sticky;
+            top: 0;
+            z-index: 999;
+        }
+
+        .logo {
+            font-size: 1.5rem;
+            font-weight: bold;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            color: var(--accent-color);
+        }
+
+        .theme-toggle {
+            background: none;
+            border: none;
+            color: var(--text-color);
+            font-size: 1.2rem;
+            cursor: pointer;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 2rem auto;
+            padding: 0 1rem;
+            display: grid;
+            grid-template-columns: 1fr;
+            gap: 1.5rem;
+        }
+
+        @media (min-width: 1024px) {
+            .container {
+                grid-template-columns: 2fr 1fr;
+            }
+        }
+
+        /* Glassmorphism Panel */
+        .glass-panel {
+            background: var(--glass-bg);
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+            border: 1px solid var(--glass-border);
+            border-radius: 16px;
+            padding: 1.5rem;
+            box-shadow: 0 8px 32px 0 var(--glass-shadow);
+            color: var(--card-text);
+        }
+
+        .panel-title {
+            font-size: 1.2rem;
+            margin-bottom: 1rem;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            border-bottom: 1px solid var(--glass-border);
+            padding-bottom: 0.5rem;
+        }
+
+        /* Map */
+        #map {
+            height: 400px;
+            border-radius: 12px;
+            width: 100%;
+            z-index: 1; /* Keep map below navbar */
+        }
+
+        /* Alerts */
+        .alert-badge {
+            display: inline-block;
+            padding: 4px 10px;
+            border-radius: 20px;
+            font-size: 0.8rem;
+            font-weight: bold;
+            color: #fff;
+        }
+        .alert-low { background: #10b981; }
+        .alert-mod { background: #f59e0b; }
+        .alert-high { background: #ef4444; }
+
+        /* Real-time Table */
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 1rem;
+        }
+        th, td {
+            padding: 12px;
+            text-align: left;
+            border-bottom: 1px solid var(--glass-border);
+        }
+        th { font-weight: 600; opacity: 0.8; }
+
+        /* AI Prediction Stats */
+        .ai-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 1rem;
+        }
+        .ai-stat {
+            background: rgba(0, 0, 0, 0.1);
+            padding: 1rem;
+            border-radius: 12px;
+            text-align: center;
+            border: 1px solid var(--glass-border);
+        }
+        [data-theme="dark"] .ai-stat {
+            background: rgba(255, 255, 255, 0.05);
+        }
+        .ai-stat h4 { font-size: 0.9rem; opacity: 0.8; margin-bottom: 5px; }
+        .ai-stat .value { font-size: 1.5rem; font-weight: bold; color: var(--accent-color); }
+
+        /* Admin Form */
+        .form-group {
+            margin-bottom: 1rem;
+        }
+        .form-group label {
+            display: block;
+            margin-bottom: 0.5rem;
+            font-size: 0.9rem;
+        }
+        .form-group input {
+            width: 100%;
+            padding: 10px;
+            border-radius: 8px;
+            border: 1px solid var(--glass-border);
+            background: rgba(255, 255, 255, 0.1);
+            color: var(--text-color);
+        }
+        .btn {
+            background: var(--accent-color);
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: bold;
+            width: 100%;
+            transition: opacity 0.2s;
+        }
+        .btn:hover { opacity: 0.9; }
+
+        /* Chart Container */
+        .chart-container {
+            position: relative;
+            height: 250px;
+            width: 100%;
+            margin-bottom: 1rem;
+        }
+        
+        .full-width {
+            grid-column: 1 / -1;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="disclaimer">
+        <i class="fa-solid fa-triangle-exclamation"></i> IMPORTANT: Earthquakes cannot currently be predicted with scientific certainty. AI predictions shown are experimental risk assessments and should not be considered official warnings.
+    </div>
+
+    <nav>
+        <div class="logo">
+            <i class="fa-solid fa-satellite-dish"></i> QuakeGuard AI
+        </div>
+        <button class="theme-toggle" onclick="toggleTheme()" title="Toggle Dark/Light Mode">
+            <i class="fa-solid fa-moon" id="theme-icon"></i>
+        </button>
+    </nav>
+
+    <div class="container">
+        
+        <div style="display: flex; flex-direction: column; gap: 1.5rem;">
+            
+            <div class="glass-panel">
+                <h3 class="panel-title"><i class="fa-solid fa-earth-americas"></i> Global Seismic Activity</h3>
+                <div id="map"></div>
+            </div>
+
+            <div class="glass-panel">
+                <h3 class="panel-title"><i class="fa-solid fa-chart-line"></i> Seismic Activity Trends & Confidence</h3>
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+                    <div class="chart-container">
+                        <canvas id="trendChart"></canvas>
+                    </div>
+                    <div class="chart-container">
+                        <canvas id="magnitudeChart"></canvas>
+                    </div>
+                </div>
+            </div>
+
+            <div class="glass-panel">
+                <h3 class="panel-title"><i class="fa-solid fa-table-list"></i> Real-Time Monitoring Panel</h3>
+                <div style="overflow-x: auto;">
+                    <table id="quake-table">
+                        <thead>
+                            <tr>
+                                <th>Location</th>
+                                <th>Magnitude</th>
+                                <th>Depth (km)</th>
+                                <th>Time</th>
+                                <th>Risk Level</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <div style="display: flex; flex-direction: column; gap: 1.5rem;">
+            
+            <div class="glass-panel">
+                <h3 class="panel-title"><i class="fa-solid fa-microchip"></i> Experimental AI Prediction</h3>
+                <p style="font-size: 0.85rem; opacity: 0.7; margin-bottom: 1rem;">Analyzing ground vibration data, historical records, and geological indicators for high-risk zones.</p>
+                
+                <div class="ai-grid">
+                    <div class="ai-stat">
+                        <h4>Probability</h4>
+                        <div class="value">78%</div>
+                    </div>
+                    <div class="ai-stat">
+                        <h4>Predicted Mag.</h4>
+                        <div class="value">5.2 - 6.1</div>
+                    </div>
+                    <div class="ai-stat">
+                        <h4>Confidence</h4>
+                        <div class="value">89%</div>
+                    </div>
+                    <div class="ai-stat">
+                        <h4>Time Window</h4>
+                        <div class="value">Next 48h</div>
+                    </div>
+                </div>
+                
+                <div style="margin-top: 1.5rem; text-align: center;">
+                    <h4 style="margin-bottom: 0.5rem;">Target Zone: Ring of Fire (Pacific)</h4>
+                    <span class="alert-badge alert-high" style="font-size: 1rem; padding: 8px 16px;">HIGH RISK DETECTED</span>
+                </div>
+            </div>
+
+            <div class="glass-panel">
+                <h3 class="panel-title"><i class="fa-solid fa-database"></i> Admin System</h3>
+                <p style="font-size: 0.85rem; opacity: 0.7; margin-bottom: 1rem;">Upload new sensor telemetry or historical datasets for AI model retraining.</p>
+                
+                <div class="form-group">
+                    <label>Dataset Name</label>
+                    <input type="text" placeholder="e.g., California_Sensor_Net_V2">
+                </div>
+                <div class="form-group">
+                    <label>Upload File (.csv, .json)</label>
+                    <input type="file">
+                </div>
+                <button class="btn" onclick="alert('Data uploaded to AI processing queue.')"><i class="fa-solid fa-cloud-arrow-up"></i> Process Data</button>
+            </div>
+        </div>
+
+    </div>
+
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    
+    <script>
+        // 1. Theme Toggle Logic
+        function toggleTheme() {
+            const html = document.documentElement;
+            const icon = document.getElementById('theme-icon');
+            
+            if (html.getAttribute('data-theme') === 'dark') {
+                html.setAttribute('data-theme', 'light');
+                icon.classList.replace('fa-moon', 'fa-sun');
+            } else {
+                html.setAttribute('data-theme', 'dark');
+                icon.classList.replace('fa-sun', 'fa-moon');
+            }
+            // Update charts on theme switch
+            updateChartThemes();
+        }
+
+        // 2. Sample Earthquake Data
+        const quakeData = [
+            { loc: "San Francisco, CA", mag: 3.2, depth: 12.5, time: "2 mins ago", risk: "Low", coords: [37.7749, -122.4194] },
+            { loc: "Tokyo, Japan", mag: 5.8, depth: 45.0, time: "15 mins ago", risk: "High", coords: [35.6762, 139.6503] },
+            { loc: "Santiago, Chile", mag: 4.1, depth: 22.1, time: "1 hr ago", risk: "Moderate", coords: [-33.4489, -70.6693] },
+            { loc: "Anchorage, AK", mag: 2.9, depth: 8.0, time: "3 hrs ago", risk: "Low", coords: [61.2181, -149.9003] },
+            { loc: "Manila, Philippines", mag: 4.7, depth: 30.5, time: "5 hrs ago", risk: "Moderate", coords: [14.5995, 120.9842] }
+        ];
+
+        // 3. Initialize Map (Leaflet)
+        const map = L.map('map').setView([20, 0], 2);
+        L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager_labels_under/{z}/{x}/{y}{r}.png', {
+            attribution: '&copy; OpenStreetMap contributors &copy; CARTO'
+        }).addTo(map);
+
+        // Populate Table and Map Markers
+        const tbody = document.querySelector('#quake-table tbody');
+        
+        quakeData.forEach(q => {
+            // Determine badge class
+            let badgeClass = 'alert-low';
+            if (q.risk === 'Moderate') badgeClass = 'alert-mod';
+            if (q.risk === 'High') badgeClass = 'alert-high';
+
+            // Add row to table
+            const row = `<tr>
+                <td><strong>${q.loc}</strong></td>
+                <td>${q.mag.toFixed(1)}</td>
+                <td>${q.depth}</td>
+                <td>${q.time}</td>
+                <td><span class="alert-badge ${badgeClass}">${q.risk}</span></td>
+            </tr>`;
+            tbody.innerHTML += row;
+
+            // Determine marker color based on magnitude
+            let markerColor = q.mag > 5 ? 'red' : q.mag > 4 ? 'orange' : 'green';
+            
+            // Add circle marker to map
+            L.circleMarker(q.coords, {
+                radius: q.mag * 2.5,
+                fillColor: markerColor,
+                color: markerColor,
+                weight: 1,
+                opacity: 1,
+                fillOpacity: 0.6
+            }).addTo(map)
+            .bindPopup(`<b>${q.loc}</b><br>Magnitude: ${q.mag}<br>Depth: ${q.depth} km`);
+        });
+
+        // 4. Initialize Charts (Chart.js)
+        Chart.defaults.color = 'rgba(150, 150, 150, 1)';
+        
+        const trendCtx = document.getElementById('trendChart').getContext('2d');
+        const magCtx = document.getElementById('magnitudeChart').getContext('2d');
+
+        let trendChart = new Chart(trendCtx, {
+            type: 'line',
+            data: {
+                labels: ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun'],
+                datasets: [{
+                    label: 'Micro-seismic Events',
+                    data: [120, 190, 150, 220, 310, 450], // Increasing trend to simulate risk
+                    borderColor: '#3b82f6',
+                    backgroundColor: 'rgba(59, 130, 246, 0.2)',
+                    fill: true,
+                    tension: 0.4
+                }]
+            },
+            options: { responsive: true, maintainAspectRatio: false }
+        });
+
+        let magChart = new Chart(magCtx, {
+            type: 'bar',
+            data: {
+                labels: ['< 3.0', '3.0 - 4.5', '4.5 - 6.0', '> 6.0'],
+                datasets: [{
+                    label: 'Recent Frequency by Mag',
+                    data: [45, 20, 8, 2],
+                    backgroundColor: ['#10b981', '#f59e0b', '#f97316', '#ef4444'],
+                }]
+            },
+            options: { responsive: true, maintainAspectRatio: false }
+        });
+
+        function updateChartThemes() {
+            // Function placeholder for dynamic theme updating of charts if desired
+            // Chart.js requires manual re-rendering for deep color changes
+            trendChart.update();
+            magChart.update();
+        }
+    </script>
+</body>
+</html>
